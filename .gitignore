@@ -1,0 +1,57 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Log files
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Editor folders
+.vscode/
+.idea/
+
+# Build output
+dist/
+build/
+
+# Coverage reports
+coverage/
+
+# Optional: PM2 process files
+pids
+*.pid
+*.seed
+
+# Optional: if you're using MongoDB dump
+dump/
+
+# Optional: SQLite database
+*.sqlite
+*.sqlite3
+
+# Optional: if you're uploading user files locally
+uploads/
+public/uploads/
+
+# Optional: TypeScript
+*.tsbuildinfo
+
+# Optional: Swagger auto-generated files
+swagger.json
+swagger.yaml
+
+# Optional: testing
+test-results/
