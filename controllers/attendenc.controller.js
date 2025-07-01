@@ -10,7 +10,6 @@ exports.getAttendance = async (req, res) => {
         let attendance;
         if (user.role === 'teacher') {
             attendance = await Attendance?.find().populate('student', 'name');
-            console.log("attendenc",attendance)
         } else if (user.role === 'student') {
             attendance = await Attendance.find({ student: user._id }).populate('student', 'name');
         } else {
