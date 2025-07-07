@@ -21,6 +21,12 @@ const userSchema = new mongoose.Schema({
     },
     phone: String,
     address: String,
+    class: {
+        type: String,
+        required: function () {
+            return this.role === 'student'; // Required only for student role
+        },
+    },
     profilePicture: String,
     isActive: {
         type: Boolean,

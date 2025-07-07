@@ -8,7 +8,7 @@ require('dotenv').config()
 // Register User
 exports.register = async (req, res) => {
     try {
-        const { name, email, password, role, phone, address } = req.body;
+        const { name, email, password, role, phone, address, class: className } = req.body;
 
         // Custom validation
         if (!name || name.trim() === '') {
@@ -22,6 +22,9 @@ exports.register = async (req, res) => {
         }
         if (!validateRole(role)) {
             return res.status(400).json({ message: 'Invalid role' });
+        }
+        if (role === 'student' && (!className || className.trim() === '')) {
+            return res.status(400).json({ message: 'Class is required for student role' });
         }
 
         // Check if user already exists
@@ -42,6 +45,7 @@ exports.register = async (req, res) => {
             role,
             phone,
             address,
+            class: role === 'student' ? className : undefined,
             isActive: true,
             createdAt: new Date(),
             updatedAt: new Date()

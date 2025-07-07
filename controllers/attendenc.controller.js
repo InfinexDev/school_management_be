@@ -4,32 +4,69 @@ const User = require('../models/user.model');
 const { sendNotification } = require('../utils/notificationService');
 
 // Get all attendance records
+// Get all attendance records
+// Get all attendance records
 exports.getAttendance = async (req, res) => {
     try {
         const user = req.user;
         let attendance;
-        if (user.role === 'teacher') {
-            attendance = await Attendance?.find().populate('student', 'name');
+        if (user.role === 'teacher' || user.role === 'admin') {
+            attendance = await Attendance.find().populate('student', 'name class').lean();
+            console.log('Attendance Records:', attendance);
+            if (!attendance || attendance.length === 0) {
+                console.log('No attendance records found in database');
+                const students = await User.find({ role: 'student' }).select('name class').lean();
+                console.log('All Students:', students);
+                attendance = students.map((student) => ({
+                    id: student._id,
+                    name: student.name,
+                    class: student.class || 'Unknown',
+                    status: 'Not Marked',
+                    date: new Date().toISOString().split('T')[0],
+                }));
+            } else {
+                // Merge attendance with all students to ensure all students are shown
+                const students = await User.find({ role: 'student' }).select('name class').lean();
+                const attendanceMap = new Map(attendance.map((record) => [record.student._id.toString(), record]));
+                attendance = students.map((student) => {
+                    const record = attendanceMap.get(student._id.toString());
+                    return record
+                        ? {
+                            id: record._id,
+                            name: student.name,
+                            class: student.class || record.class || 'Unknown',
+                            status: record.status,
+                            date: new Date(record.date).toISOString().split('T')[0],
+                        }
+                        : {
+                            id: student._id,
+                            name: student.name,
+                            class: student.class || 'Unknown',
+                            status: 'Not Marked',
+                            date: new Date().toISOString().split('T')[0],
+                        };
+                });
+            }
         } else if (user.role === 'student') {
-            attendance = await Attendance.find({ student: user._id }).populate('student', 'name');
+            attendance = await Attendance.find({ student: user._id }).populate('student', 'name class').lean();
         } else {
             return res.status(403).json({ message: 'Unauthorized access' });
         }
-        const formattedAttendance = attendance?.map((record) => ({
-            id: record._id,
-            name: record.student.name,
-            class: record.class,
-            status: record.status,
-            date: record.date.toISOString().split('T')[0],
+        const formattedAttendance = attendance.map((record) => ({
+            id: record._id || record.id,
+            name: record.student?.name || record.name || 'Unknown',
+            class: record.student?.class || record.class || 'Unknown',
+            status: record.status || 'Not Marked',
+            date: record.date ? new Date(record.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         }));
         res.status(200).json({ attendance: formattedAttendance });
     } catch (error) {
         console.error('Get attendance error:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
 
-// Mark attendance (Teacher-only)
+// Mark attendance
 exports.markAttendance = async (req, res) => {
     try {
         const { studentId, status } = req.body;
@@ -49,7 +86,7 @@ exports.markAttendance = async (req, res) => {
 
         const attendance = new Attendance({
             student: studentId,
-            class: student.class || 'Unknown',
+            class: student.class || 'Unknown', // Ensure class from User collection
             status,
             date: new Date(),
         });
@@ -69,7 +106,7 @@ exports.markAttendance = async (req, res) => {
             attendance: {
                 id: attendance._id,
                 name: student.name,
-                class: attendance.class,
+                class: student.class || 'Unknown',
                 status: attendance.status,
                 date: attendance.date.toISOString().split('T')[0],
             },
@@ -133,7 +170,7 @@ exports.getLeaveRequests = async (req, res) => {
     try {
         const user = req.user;
         let leaveRequests;
-        if (user.role === 'teacher') {
+        if (user.role === 'teacher' || user.role === 'admin') {
             leaveRequests = await LeaveRequest.find().populate('student', 'name');
         } else if (user.role === 'student') {
             leaveRequests = await LeaveRequest.find({ student: user._id }).populate('student', 'name');

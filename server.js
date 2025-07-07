@@ -5,6 +5,15 @@ const cors = require('cors');
 require("dotenv").config()
 const studyMaterialRoute = require("./routes/studyMaterial.route")
 const attendanceRoutes = require("./routes/attendenc.route")
+const notificationRoutes = require("./routes/notification.route")
+const feeRoutes = require("./routes/fees.route")
+const userRoutes = require("./routes/user.route")
+const reportRoutes = require("./routes/report.route")
+const promotionRoute = require("./routes/promotion.route")
+const admissionRoute = require("./routes/admission.routes")
+const gallaryRoute = require("./routes/gallary.route")
+const path = require('path');
+
 // const helmet = require('helmet');
 
 const app = express();
@@ -23,6 +32,15 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/study-materials', studyMaterialRoute);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/fees', feeRoutes);
+app.use('/api', feeRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/promotions', promotionRoute)
+app.use('/api/admissions', admissionRoute);
+app.use('/api/gallery', gallaryRoute);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
