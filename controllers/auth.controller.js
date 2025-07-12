@@ -8,7 +8,7 @@ require('dotenv').config()
 // Register User
 exports.register = async (req, res) => {
     try {
-        const { name, email, password, role, phone, address, class: className } = req.body;
+        const { name, email, password, role, phone, address, class: className, parentEmail } = req.body;
 
         // Custom validation
         if (!name || name.trim() === '') {
@@ -25,6 +25,9 @@ exports.register = async (req, res) => {
         }
         if (role === 'student' && (!className || className.trim() === '')) {
             return res.status(400).json({ message: 'Class is required for student role' });
+        }
+        if (role === 'student' && (!parentEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail))) {
+            return res.status(400).json({ message: 'Valid parent email is required for student role' });
         }
 
         // Check if user already exists
@@ -46,9 +49,10 @@ exports.register = async (req, res) => {
             phone,
             address,
             class: role === 'student' ? className : undefined,
+            parentEmail: role === 'student' ? parentEmail : undefined,
             isActive: true,
             createdAt: new Date(),
-            updatedAt: new Date()
+            updatedAt: new Date(),
         });
 
         await user.save();
@@ -64,8 +68,8 @@ exports.register = async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                role: user.role
-            }
+                role: user.role,
+            },
         });
     } catch (error) {
         console.error('Registration error:', error);
@@ -134,7 +138,8 @@ exports.getMe = async (req, res) => {
             phone: user.phone,
             address: user.address,
             profilePicture: user.profilePicture,
-            isActive: user.isActive
+            parentEmail: user.parentEmail,
+            isActive: user.isActive,
         });
     } catch (error) {
         console.error('Profile error:', error);
@@ -145,7 +150,7 @@ exports.getMe = async (req, res) => {
 // Update User Profile
 exports.updateProfile = async (req, res) => {
     try {
-        const { name, email, phone, address } = req.body;
+        const { name, email, phone, address, parentEmail } = req.body;
         const userId = req.user.userId;
 
         // Custom validation
@@ -154,6 +159,9 @@ exports.updateProfile = async (req, res) => {
         }
         if (!validateEmail(email)) {
             return res.status(400).json({ message: 'Valid email is required' });
+        }
+        if (req.user.role === 'student' && (!parentEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail))) {
+            return res.status(400).json({ message: 'Valid parent email is required for student role' });
         }
 
         // Check if email is already taken by another user
@@ -170,9 +178,10 @@ exports.updateProfile = async (req, res) => {
                 email,
                 phone,
                 address,
+                parentEmail: req.user.role === 'student' ? parentEmail : undefined,
                 updatedAt: new Date(),
             },
-            { new: true, runValidators: true }
+            { new: true, runValidators: true },
         ).select('-password');
 
         if (!updatedUser) {
@@ -189,6 +198,7 @@ exports.updateProfile = async (req, res) => {
                 phone: updatedUser.phone,
                 address: updatedUser.address,
                 profilePicture: updatedUser.profilePicture,
+                parentEmail: updatedUser.parentEmail,
                 isActive: updatedUser.isActive,
             },
         });

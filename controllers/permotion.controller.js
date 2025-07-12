@@ -17,6 +17,7 @@ exports.getPromotions = async (req, res) => {
             title: promotion.title,
             description: promotion.description,
             url: promotion.fileUrl,
+            thumbnailUrl: promotion.fileUrl || '',
             uploadedBy: promotion.uploadedBy?.name || 'Admin',
             date: promotion.createdAt.toISOString().split('T')[0],
         }));
@@ -42,13 +43,34 @@ exports.uploadPromotion = async (req, res) => {
         }
 
         const { type, title, description } = req.body;
+        if (!['Video', 'Image', 'PDF'].includes(type) || !title || !description) {
+            return res.status(400).json({ message: 'Invalid or missing type, title, or description' });
+        }
+
+        // Validate file type
+        const allowedTypes = {
+            Video: ['video/mp4'],
+            Image: ['image/jpeg', 'image/png','image/jpg'],
+            PDF: ['application/pdf'],
+        };
+        if (!allowedTypes[type].includes(req.file.mimetype)) {
+            return res.status(400).json({ message: `Invalid file type for ${type}. Allowed: ${allowedTypes[type].join(', ')}` });
+        }
+
         const fileUrl = `/uploads/promotions/${req.file.filename}`;
+        let thumbnailUrl = '';
+        if (type === 'Image') {
+            thumbnailUrl = fileUrl; // Use same image as thumbnail
+        } else if (type === 'Video') {
+            thumbnailUrl = `/Uploads/promotions/thumbnails/${req.file.filename}.thumb.jpg`; // Placeholder for video thumbnail
+        }
 
         const newPromotion = new Promotion({
             type,
             title,
             description,
             fileUrl,
+            thumbnailUrl,
             uploadedBy: user._id,
         });
 
@@ -61,6 +83,7 @@ exports.uploadPromotion = async (req, res) => {
             title: newPromotion.title,
             description: newPromotion.description,
             url: newPromotion.fileUrl,
+            thumbnailUrl: newPromotion.thumbnailUrl,
             uploadedBy: user.name || 'Admin',
             date: newPromotion.createdAt.toISOString().split('T')[0],
         };

@@ -1,7 +1,10 @@
+const { default: mongoose } = require('mongoose');
 const Attendance = require('../models/attendence.model');
 const LeaveRequest = require('../models/leaveRequest.model');
 const User = require('../models/user.model');
 const { sendNotification } = require('../utils/notificationService');
+const nodemailer = require("nodemailer")
+require("dotenv").config()
 
 // Get all attendance records
 // Get all attendance records
@@ -66,6 +69,33 @@ exports.getAttendance = async (req, res) => {
     }
 };
 
+const sendEmail = async ({ to, subject, text }) => {
+    try {
+        const transporter = nodemailer.createTransport({
+            host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+            port: parseInt(process.env.EMAIL_PORT) || 587,
+            secure: false, // Use TLS
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+        });
+
+        const mailOptions = {
+            from: `"School System" <${process.env.EMAIL_USER}>`,
+            to,
+            subject,
+            text,
+            html: `<p>${text}</p>`,
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log(`Email sent to ${to}`);
+    } catch (error) {
+        console.error('Email sending error:', error);
+        throw new Error('Failed to send email');
+    }
+};
 // Mark attendance
 exports.markAttendance = async (req, res) => {
     try {
@@ -79,14 +109,21 @@ exports.markAttendance = async (req, res) => {
             return res.status(400).json({ message: 'Invalid student ID or status' });
         }
 
+        // Validate studentId format
+        if (!mongoose.isValidObjectId(studentId)) {
+            console.log(`Invalid studentId format: ${studentId}`);
+            return res.status(400).json({ message: 'Invalid student ID format' });
+        }
+
         const student = await User.findById(studentId);
+        console.log('Student lookup:', { studentId, student });
         if (!student || student.role !== 'student') {
-            return res.status(404).json({ message: 'Student not found' });
+            return res.status(404).json({ message: `Student not found for ID: ${studentId}` });
         }
 
         const attendance = new Attendance({
             student: studentId,
-            class: student.class || 'Unknown', // Ensure class from User collection
+            class: student.class || 'Unknown',
             status,
             date: new Date(),
         });
@@ -94,6 +131,23 @@ exports.markAttendance = async (req, res) => {
         await attendance.save();
 
         if (status === 'Absent') {
+            // Send email to student
+            await sendEmail({
+                to: student.email,
+                subject: 'Absence Notification',
+                text: `Dear ${student.name},\n\nYou have been marked absent for ${student.class || 'your class'} on ${new Date().toISOString().split('T')[0]}.\n\nPlease contact your teacher if you have any questions.\n\nRegards,\nSchool System`,
+            });
+
+            // Send email to parent if parentEmail exists
+            if (student.parentEmail) {
+                await sendEmail({
+                    to: student.parentEmail,
+                    subject: 'Absence Notification for Your Child',
+                    text: `Dear Parent/Guardian,\n\nYour child, ${student.name}, has been marked absent for ${student.class || 'their class'} on ${new Date().toISOString().split('T')[0]}.\n\nPlease contact the school for more details.\n\nRegards,\nSchool System`,
+                });
+            }
+
+            // Existing notification
             await sendNotification({
                 userId: studentId,
                 message: `${student.name} marked absent on ${new Date().toISOString().split('T')[0]}`,
@@ -113,10 +167,9 @@ exports.markAttendance = async (req, res) => {
         });
     } catch (error) {
         console.error('Mark attendance error:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
-
 // Submit leave request (Student-only)
 exports.submitLeaveRequest = async (req, res) => {
     try {

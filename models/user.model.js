@@ -32,14 +32,26 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true,
     },
-    createdAt: {
-        type: Date,
-        default: Date.now,
+    parentEmail: {
+        type: String,
+        required: function () {
+            return this.role === 'student'; // Required only for student role
+        },
+        validate: {
+            validator: function (email) {
+                return !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); // Optional email validation
+            },
+            message: 'Invalid parent email format',
+        },
     },
-    updatedAt: {
-        type: Date,
-        default: Date.now,
-    },
+    // createdAt: {
+    //     type: Date,
+    //     default: Date.now,
+    // },
+    // updatedAt: {
+    //     type: Date,
+    //     default: Date.now,
+    // },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

@@ -1,15 +1,14 @@
 const mongoose = require('mongoose');
 
-const feeSchema = new mongoose.Schema({
+const paymentSchema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   studentName: { type: String, required: true, trim: true },
   rollNo: { type: String, required: true, trim: true },
-  class: { type: String, required: true, trim: true },
   type: { type: String, required: true, trim: true },
   amount: { type: Number, required: true, min: 1 },
-  dueDate: { type: Date, required: true },
-  status: { type: String, enum: ['Pending', 'Paid'], default: 'Pending' },
+  date: { type: Date, default: Date.now },
+  status: { type: String, enum: ['Completed', 'Failed'], default: 'Completed' },
+  method: { type: String, required: true },
 });
 
-feeSchema.index({ studentId: 1, class: 1, dueDate: 1 });
-module.exports = mongoose.model('Fee', feeSchema);
+module.exports = mongoose.model('Payment', paymentSchema);
