@@ -7,18 +7,24 @@ const path = require('path');
 const multer = require('multer');
 const fs = require("fs");
 
+const validateSection = (section) => {
+    const validSections = ['A', 'B', 'C', 'D'];
+    return section && validSections.includes(section);
+};
+
+
 // Upload Study Material (Teacher-only)
 exports.uploadStudyMaterial = async (req, res) => {
     try {
-        const { class: className, subject, type, title } = req.body;
+        const { class: className, subject, type, title, section } = req.body;
         const user = req.user;
 
         // Validate user
         if (!user || !user._id) {
             return res.status(401).json({ message: 'Unauthorized: User not authenticated' });
         }
-        if (user.role !== 'teacher') {
-            return res.status(403).json({ message: 'Only teachers can upload study materials' });
+        if (user.role === 'user') {
+            return res.status(403).json({ message: 'Only teachers and admins can upload study materials' });
         }
 
         // Custom validation
@@ -38,6 +44,10 @@ exports.uploadStudyMaterial = async (req, res) => {
             return res.status(400).json({ message: 'A PDF or MP4 file is required' });
         }
 
+        if (!validateSection(section)) {
+            return res.status(400).json({ message: 'Valid section (A-D) is required' });
+        }
+
         const url = `/Uploads/${req.file.filename}`;
 
         const studyMaterial = new StudyMaterial({
@@ -45,6 +55,7 @@ exports.uploadStudyMaterial = async (req, res) => {
             subject,
             type,
             title,
+            section,
             url,
             uploadedBy: user._id,
             date: new Date()
@@ -55,8 +66,9 @@ exports.uploadStudyMaterial = async (req, res) => {
         // Notify students
         await sendNotification({
             class: className,
+            section,
             subject,
-            message: `New ${type} material "${title}" uploaded for ${className} - ${subject}`,
+            message: `New ${type} material "${title}" uploaded for ${className} - Section ${section} - ${subject}`,
             type: 'material_upload'
         });
 
@@ -68,6 +80,7 @@ exports.uploadStudyMaterial = async (req, res) => {
                 subject: studyMaterial.subject,
                 type: studyMaterial.type,
                 title: studyMaterial.title,
+                section: studyMaterial.section,
                 url: studyMaterial.url,
                 uploadedBy: user.name,
                 date: studyMaterial.date.toISOString().split('T')[0]
@@ -91,12 +104,12 @@ exports.uploadStudyMaterial = async (req, res) => {
 // Schedule Daily Topic (Teacher-only)
 exports.scheduleTopic = async (req, res) => {
     try {
-        const { class: className, subject, topic, date } = req.body;
+        const { class: className, subject, topic, date, section } = req.body;
         const user = req.user;
 
         // Validate user role
-        if (user.role !== 'teacher') {
-            return res.status(403).json({ message: 'Only teachers can schedule topics' });
+        if (user.role === 'user') {
+            return res.status(403).json({ message: 'Only teachers and admins can schedule topics' });
         }
 
         // Custom validation
@@ -112,11 +125,15 @@ exports.scheduleTopic = async (req, res) => {
         if (!date || isNaN(new Date(date))) {
             return res.status(400).json({ message: 'Valid date is required' });
         }
+        if (!validateSection(section)) {
+            return res.status(400).json({ message: 'Valid section (A-D) is required' });
+        }
 
         const scheduledTopic = new ScheduledTopic({
             class: className,
             subject,
             topic,
+            section,
             date: new Date(date),
             scheduledBy: user._id
         });
@@ -126,8 +143,9 @@ exports.scheduleTopic = async (req, res) => {
         // Notify students via WhatsApp/SMS/Email
         await sendNotification({
             class: className,
+            section, // Add section
             subject,
-            message: `New topic "${topic}" scheduled for ${className} - ${subject} on ${date}`,
+            message: `New topic "${topic}" scheduled for ${className} - Section ${section} - ${subject} on ${date}`,
             type: 'topic_schedule'
         });
 
@@ -138,6 +156,7 @@ exports.scheduleTopic = async (req, res) => {
                 class: scheduledTopic.class,
                 subject: scheduledTopic.subject,
                 topic: scheduledTopic.topic,
+                section: scheduledTopic.section,
                 date: scheduledTopic.date.toISOString().split('T')[0]
             }
         });
@@ -161,6 +180,7 @@ exports.getStudyMaterials = async (req, res) => {
                 subject: material.subject,
                 type: material.type,
                 title: material.title,
+                section: material.section,
                 url: material.url,
                 uploadedBy: material.uploadedBy.name,
                 date: material.date.toISOString().split('T')[0]
@@ -183,6 +203,7 @@ exports.getScheduledTopics = async (req, res) => {
                 id: topic._id,
                 class: topic.class,
                 subject: topic.subject,
+                section: topic.section,
                 topic: topic.topic,
                 date: topic.date.toISOString().split('T')[0]
             }))

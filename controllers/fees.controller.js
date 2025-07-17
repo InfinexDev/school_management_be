@@ -112,7 +112,7 @@ exports.payFee = async (req, res) => {
         const user = req.user;
         const feeId = req.params.id;
 
-        if (user.role !== 'student' && user.role !== 'parent') {
+        if (user.role !== 'student' && user.role !== 'admin') {
             return res.status(403).json({ message: 'Only students can pay fees' });
         }
         if (!method) {
