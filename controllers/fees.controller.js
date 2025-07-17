@@ -105,7 +105,6 @@ exports.addFee = async (req, res) => {
     }
 };
 
-// Pay fee (Student/Parent only)
 exports.payFee = async (req, res) => {
     try {
         const { method } = req.body;
