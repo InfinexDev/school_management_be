@@ -47,7 +47,6 @@ exports.uploadPromotion = async (req, res) => {
             return res.status(400).json({ message: 'Invalid or missing type, title, or description' });
         }
 
-        // Validate file type
         const allowedTypes = {
             Video: ['video/mp4'],
             Image: ['image/jpeg', 'image/png','image/jpg'],
