@@ -125,7 +125,7 @@ exports.login = async (req, res) => {
 // Get Current User Profile
 exports.getMe = async (req, res) => {
     try {
-        const user = await User.findById(req.user.userId).select('-password');
+        const user = await User.findById(req.user._id).select('-password');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -151,7 +151,7 @@ exports.getMe = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         const { name, email, phone, address, parentEmail } = req.body;
-        const userId = req.user.userId;
+        const userId = req.user._id;
 
         // Custom validation
         if (!name || name.trim() === '') {

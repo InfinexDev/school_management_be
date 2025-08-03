@@ -2,6 +2,14 @@ const Report = require('../models/reports.model');
 const User = require('../models/user.model');
 const PDFDocument = require('pdfkit');
 
+const gradeThresholds = [
+    { grade: 'A', min: 85 },
+    { grade: 'B', min: 70 },
+    { grade: 'C', min: 55 },
+    { grade: 'D', min: 40 },
+    { grade: 'F', min: 0 },
+];
+
 // Get all reports
 exports.getReports = async (req, res) => {
     try {
@@ -33,9 +41,15 @@ exports.getReports = async (req, res) => {
             type: report.type,
             student: report.studentId?.name || 'Unknown',
             class: report.class,
-            subject: report.subject || '',
-            marks: report.marks || '',
+            subjectMarks: report.subjectMarks || [],
+            overallGrade: report.overallGrade || '',
             attendance: report.attendance || '',
+            presentDays: report.presentDays || '',
+            leaveDays: report.leaveDays || '',
+            leaveReason: report.leaveReason || '',
+            assessmentType: report.assessmentType || '',
+            term: report.term || '',
+            summaryNotes: report.summaryNotes || '',
             date: report.date.toISOString().split('T')[0],
         }));
 
@@ -49,7 +63,7 @@ exports.getReports = async (req, res) => {
 // Generate new report (Admin/Teacher only)
 exports.generateReport = async (req, res) => {
     try {
-        const { type, studentId, class: className, subject, marks, attendance } = req.body;
+        const { type, studentId, class: className, subjectMarks, attendance, presentDays, leaveDays, leaveReason, assessmentType, term, summaryNotes } = req.body;
         const user = req.user;
 
         if (user.role !== 'admin' && user.role !== 'teacher') {
@@ -57,12 +71,6 @@ exports.generateReport = async (req, res) => {
         }
         if (!type || !studentId || !className) {
             return res.status(400).json({ message: 'Type, student, and class are required' });
-        }
-        if (type === 'Academic' && (!subject || !marks)) {
-            return res.status(400).json({ message: 'Subject and marks are required for Academic report' });
-        }
-        if (type === 'Attendance' && !attendance) {
-            return res.status(400).json({ message: 'Attendance is required for Attendance report' });
         }
 
         // Validate studentId
@@ -80,24 +88,60 @@ exports.generateReport = async (req, res) => {
             return res.status(400).json({ message: 'Invalid class' });
         }
 
-        // Validate subject for Academic reports
-        if (type === 'Academic') {
-            const validSubjects = [
-                'Mathematics', 'Science', 'English', 'Social Studies', 'Hindi', 'Computer Science',
-            ];
-            if (!validSubjects.includes(subject)) {
-                return res.status(400).json({ message: 'Invalid subject' });
+        // Validate based on report type
+        const validSubjects = ['Mathematics', 'Science', 'English', 'Social Studies', 'Hindi', 'Computer Science'];
+        if (type === 'Academic' || type === 'Grading') {
+            if (!subjectMarks || !Array.isArray(subjectMarks) || subjectMarks.length === 0) {
+                return res.status(400).json({ message: 'Subject and marks are required for Academic/Grading report' });
             }
-            if (isNaN(marks) || marks < 0 || marks > 100) {
-                return res.status(400).json({ message: 'Marks must be between 0 and 100' });
+            for (const sm of subjectMarks) {
+                if (!validSubjects.includes(sm.subject)) {
+                    return res.status(400).json({ message: `Invalid subject: ${sm.subject}` });
+                }
+                if (isNaN(sm.marks) || sm.marks < 0 || sm.marks > 100) {
+                    return res.status(400).json({ message: `Marks for ${sm.subject} must be between 0 and 100` });
+                }
+            }
+            if (!assessmentType || !['Unit Test', 'Mid Term', 'Final Exam'].includes(assessmentType)) {
+                return res.status(400).json({ message: 'Valid assessment type is required' });
+            }
+            if (!term || !['Term 1', 'Term 2', 'Annual'].includes(term)) {
+                return res.status(400).json({ message: 'Valid term is required' });
             }
         }
-
-        // Validate attendance for Attendance reports
         if (type === 'Attendance') {
+            if (!attendance || !presentDays) {
+                return res.status(400).json({ message: 'Attendance and present days are required for Attendance report' });
+            }
             const attendanceValue = parseFloat(attendance.replace('%', ''));
             if (isNaN(attendanceValue) || attendanceValue < 0 || attendanceValue > 100) {
                 return res.status(400).json({ message: 'Attendance must be a percentage between 0 and 100' });
+            }
+            if (isNaN(presentDays) || presentDays < 0) {
+                return res.status(400).json({ message: 'Present days must be a non-negative number' });
+            }
+        }
+        if (type === 'Leave') {
+            if (!leaveDays || !leaveReason) {
+                return res.status(400).json({ message: 'Leave days and reason are required for Leave report' });
+            }
+            if (isNaN(leaveDays) || leaveDays < 0) {
+                return res.status(400).json({ message: 'Leave days must be a non-negative number' });
+            }
+        }
+        if (type === 'Summary' && summaryNotes && summaryNotes.length > 1000) {
+            return res.status(400).json({ message: 'Summary notes cannot exceed 1000 characters' });
+        }
+
+        // Calculate overall grade for Grading report
+        let overallGrade = null;
+        if (type === 'Grading' && subjectMarks) {
+            const avgMarks = subjectMarks.reduce((sum, sm) => sum + parseInt(sm.marks), 0) / subjectMarks.length;
+            for (const threshold of gradeThresholds) {
+                if (avgMarks >= threshold.min) {
+                    overallGrade = threshold.grade;
+                    break;
+                }
             }
         }
 
@@ -106,9 +150,15 @@ exports.generateReport = async (req, res) => {
             studentId,
             student: student.name,
             class: className,
-            subject: type === 'Academic' ? subject : undefined,
-            marks: type === 'Academic' ? parseInt(marks) : undefined,
+            subjectMarks: type === 'Academic' || type === 'Grading' ? subjectMarks : undefined,
+            overallGrade: type === 'Grading' ? overallGrade : undefined,
             attendance: type === 'Attendance' ? attendance : undefined,
+            presentDays: type === 'Attendance' ? parseInt(presentDays) : undefined,
+            leaveDays: type === 'Leave' ? parseInt(leaveDays) : undefined,
+            leaveReason: type === 'Leave' ? leaveReason : undefined,
+            assessmentType: type === 'Academic' || type === 'Grading' ? assessmentType : undefined,
+            term: type === 'Academic' || type === 'Grading' ? term : undefined,
+            summaryNotes: type === 'Summary' ? summaryNotes : undefined,
             date: new Date(),
         });
 
@@ -121,9 +171,15 @@ exports.generateReport = async (req, res) => {
                 type: report.type,
                 student: report.student,
                 class: report.class,
-                subject: report.subject || '',
-                marks: report.marks || '',
+                subjectMarks: report.subjectMarks || [],
+                overallGrade: report.overallGrade || '',
                 attendance: report.attendance || '',
+                presentDays: report.presentDays || '',
+                leaveDays: report.leaveDays || '',
+                leaveReason: report.leaveReason || '',
+                assessmentType: report.assessmentType || '',
+                term: report.term || '',
+                summaryNotes: report.summaryNotes || '',
                 date: report.date.toISOString().split('T')[0],
             },
         });
@@ -159,14 +215,28 @@ exports.exportReport = async (req, res) => {
         doc.pipe(res);
         doc.fontSize(20).fillColor('#0f766e').text('Report Details', { align: 'center' });
         doc.moveDown(1.5);
-        doc.fontSize(14).fillColor('#1f2937').text(`Type: ${report.type}`);
+        doc.fontSize(14).fillColor('#1f2937');
+        doc.text(`Type: ${report.type}`);
         doc.text(`Student: ${report.studentId?.name || 'Unknown'}`);
         doc.text(`Class: ${report.class}`);
-        if (report.type === 'Academic') {
-            doc.text(`Subject: ${report.subject || '-'}`);
-            doc.text(`Marks: ${report.marks || '-'}`);
-        } else {
+        if (report.type === 'Academic' || report.type === 'Grading') {
+            doc.text('Subjects and Marks:');
+            report.subjectMarks?.forEach(sm => {
+                doc.text(`  ${sm.subject}: ${sm.marks}`);
+            });
+            if (report.type === 'Grading') {
+                doc.text(`Overall Grade: ${report.overallGrade || '-'}`);
+            }
+            doc.text(`Assessment Type: ${report.assessmentType || '-'}`);
+            doc.text(`Term: ${report.term || '-'}`);
+        } else if (report.type === 'Attendance') {
             doc.text(`Attendance: ${report.attendance || '-'}`);
+            doc.text(`Present Days: ${report.presentDays || '-'}`);
+        } else if (report.type === 'Leave') {
+            doc.text(`Leave Days: ${report.leaveDays || '-'}`);
+            doc.text(`Leave Reason: ${report.leaveReason || '-'}`);
+        } else if (report.type === 'Summary') {
+            doc.text(`Summary Notes: ${report.summaryNotes || '-'}`);
         }
         doc.text(`Date: ${new Date(report.date).toLocaleDateString('en-GB', {
             day: '2-digit',
