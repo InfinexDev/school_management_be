@@ -51,6 +51,7 @@ exports.register = async (req, res) => {
             class: role === 'student' ? className : undefined,
             parentEmail: role === 'student' ? parentEmail : undefined,
             isActive: true,
+             isApproved: role === 'student' ? false : true,
             createdAt: new Date(),
             updatedAt: new Date(),
         });
@@ -101,6 +102,10 @@ exports.login = async (req, res) => {
         if (!isValidPassword) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
+        if (user.role === 'student' && !user.isApproved) {
+  return res.status(403).json({ message: 'Your account is not yet approved by the admin.' });
+}
+
 
         // Generate tokens
         const { accessToken, refreshToken } = generateToken(user);
@@ -207,3 +212,63 @@ exports.updateProfile = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+
+exports.getPendingStudents = async (req, res) => {
+  try {
+    const students = await User.find({ role: 'student', isApproved: false }).select('-password');
+
+    res.status(200).json({
+      message: 'Pending students fetched successfully',
+      total: students.length,
+      students: students.map(student => ({
+        id: student._id,
+        name: student.name,
+        email: student.email,
+        class: student.class,
+        parentEmail: student.parentEmail,
+        phone: student.phone,
+        address: student.address,
+        createdAt: student.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching pending students:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// PUT /api/users/approve/:id
+exports.approveStudent = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const updatedStudent = await User.findByIdAndUpdate(
+      userId,
+      { isApproved: true },
+      { new: true }
+    ).select('-password');
+
+    if (!updatedStudent) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    res.status(200).json({
+      message: 'Student approved successfully',
+      student: {
+        id: updatedStudent._id,
+        name: updatedStudent.name,
+        email: updatedStudent.email,
+        class: updatedStudent.class,
+        parentEmail: updatedStudent.parentEmail,
+        phone: updatedStudent.phone,
+        address: updatedStudent.address,
+        approvedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error('Error approving student:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const upload = require('../utils/multerGallary');
 const galleryController = require('../controllers/gallary.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+const {authMiddleware} = require('../middleware/auth.middleware');
 
 router.get('/', galleryController.getGallery);
 router.post('/', upload.single('file'), galleryController.uploadGalleryImage);
