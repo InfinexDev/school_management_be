@@ -36,7 +36,7 @@ const sendEmail = async ({ to, subject, text }) => {
 const sendNotification = async ({ userId, class: className, section, subject, message, type, recipients }) => {
   try {
     let recipientEmails = [];
-    
+
     // Determine recipients based on input
     if (userId) {
       // Specific user notification (e.g., absence or leave approval)
@@ -76,6 +76,21 @@ const sendNotification = async ({ userId, class: className, section, subject, me
     if (recipientEmails.length === 0) {
       console.log('No valid recipients found for notification');
       return;
+    }
+
+    if (type === 'password_reset') {
+      if (!userId || !message.includes('http')) {
+        throw new Error('Password reset requires userId and a reset link');
+      }
+      const user = await User.findById(userId).select('email name');
+      if (!user || !user.email) {
+        throw new Error('User email not found');
+      }
+      await sendEmail({
+        to: user.email,
+        subject: 'Password Reset Request',
+        text: `Dear ${user.name || 'User'},\n\nYou requested a password reset. Click the link below to reset your password:\n${message}\n\nThis link expires in 1 hour.\n\nRegards,\nSchool System`,
+      });
     }
 
     // Send emails based on notification type

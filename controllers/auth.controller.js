@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken')
 const User = require("../models/user.model");
 const { validateEmail, validatePassword, validateRole } = require('../utils/validators');
 const generateToken = require('../utils/generateToken');
+const crypto = require("crypto");
 require('dotenv').config()
 
 // Register User
@@ -51,7 +52,7 @@ exports.register = async (req, res) => {
             class: role === 'student' ? className : undefined,
             parentEmail: role === 'student' ? parentEmail : undefined,
             isActive: true,
-             isApproved: role === 'student' ? false : true,
+            isApproved: role === 'student' ? false : true,
             createdAt: new Date(),
             updatedAt: new Date(),
         });
@@ -103,8 +104,8 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
         if (user.role === 'student' && !user.isApproved) {
-  return res.status(403).json({ message: 'Your account is not yet approved by the admin.' });
-}
+            return res.status(403).json({ message: 'Your account is not yet approved by the admin.' });
+        }
 
 
         // Generate tokens
@@ -215,60 +216,139 @@ exports.updateProfile = async (req, res) => {
 
 
 exports.getPendingStudents = async (req, res) => {
-  try {
-    const students = await User.find({ role: 'student', isApproved: false }).select('-password');
+    try {
+        const students = await User.find({ role: 'student', isApproved: false }).select('-password');
 
-    res.status(200).json({
-      message: 'Pending students fetched successfully',
-      total: students.length,
-      students: students.map(student => ({
-        id: student._id,
-        name: student.name,
-        email: student.email,
-        class: student.class,
-        parentEmail: student.parentEmail,
-        phone: student.phone,
-        address: student.address,
-        createdAt: student.createdAt,
-      })),
-    });
-  } catch (error) {
-    console.error('Error fetching pending students:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
+        res.status(200).json({
+            message: 'Pending students fetched successfully',
+            total: students.length,
+            students: students.map(student => ({
+                id: student._id,
+                name: student.name,
+                email: student.email,
+                class: student.class,
+                parentEmail: student.parentEmail,
+                phone: student.phone,
+                address: student.address,
+                createdAt: student.createdAt,
+            })),
+        });
+    } catch (error) {
+        console.error('Error fetching pending students:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
 };
 
 // PUT /api/users/approve/:id
 exports.approveStudent = async (req, res) => {
-  try {
-    const userId = req.params.id;
+    try {
+        const userId = req.params.id;
 
-    const updatedStudent = await User.findByIdAndUpdate(
-      userId,
-      { isApproved: true },
-      { new: true }
-    ).select('-password');
+        const updatedStudent = await User.findByIdAndUpdate(
+            userId,
+            { isApproved: true },
+            { new: true }
+        ).select('-password');
 
-    if (!updatedStudent) {
-      return res.status(404).json({ message: 'Student not found' });
+        if (!updatedStudent) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+
+        res.status(200).json({
+            message: 'Student approved successfully',
+            student: {
+                id: updatedStudent._id,
+                name: updatedStudent.name,
+                email: updatedStudent.email,
+                class: updatedStudent.class,
+                parentEmail: updatedStudent.parentEmail,
+                phone: updatedStudent.phone,
+                address: updatedStudent.address,
+                approvedAt: new Date(),
+            },
+        });
+    } catch (error) {
+        console.error('Error approving student:', error);
+        res.status(500).json({ message: 'Server error' });
     }
+};
 
-    res.status(200).json({
-      message: 'Student approved successfully',
-      student: {
-        id: updatedStudent._id,
-        name: updatedStudent.name,
-        email: updatedStudent.email,
-        class: updatedStudent.class,
-        parentEmail: updatedStudent.parentEmail,
-        phone: updatedStudent.phone,
-        address: updatedStudent.address,
-        approvedAt: new Date(),
-      },
-    });
-  } catch (error) {
-    console.error('Error approving student:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
+
+exports.forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        // Validate email
+        if (!validateEmail(email)) {
+            return res.status(400).json({ message: 'Valid email is required' });
+        }
+
+        // Find user
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Generate reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetTokenExpiry = Date.now() + 3600000; // 1 hour expiry
+
+        // Save token and expiry to user
+        user.resetPasswordToken = resetToken;
+        user.resetPasswordExpires = resetTokenExpiry;
+        await user.save();
+
+        // Send reset email (assumes sendResetEmail utility exists)
+        await sendNotification({
+            userId: user._id,
+            type: 'password_reset',
+            message: `${process.env.CLIENT_URL}/reset-password/${resetToken}`,
+        });
+
+        res.status(200).json({ message: 'Password reset email sent' });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// Reset Password
+exports.resetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body;
+
+        // Validate inputs
+        if (!password || !validatePassword(password)) {
+            return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        }
+        if (!token) {
+            return res.status(400).json({ message: 'Reset token is required' });
+        }
+
+        // Find user by reset token and check expiry
+        const user = await User.findOne({
+            resetPasswordToken: token,
+            resetPasswordExpires: { $gt: Date.now() },
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired reset token' });
+        }
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Update user
+        user.password = hashedPassword;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        res.status(200).json({ message: 'Password reset successfully' });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
 };
 
